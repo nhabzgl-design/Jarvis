@@ -1,32 +1,123 @@
 name: Build ZERO APK
+
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/build.yml"
+      - "index.html"
+
+permissions:
+  contents: read
+
 jobs:
   build:
+    name: Build Android APK
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check source file
+        run: |
+          set -euxo pipefail
+          test -f index.html
+          ls -lh index.html
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
-      - uses: actions/setup-java@v4
+          node-version: "20"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
-      - name: Gawin ang Android project
+          java-version: "17"
+
+      - name: Create Capacitor project
         run: |
-          mkdir apk && cd apk
+          set -euxo pipefail
+          mkdir -p apk/www
+          cp index.html apk/www/index.html
+          cd apk
           npm init -y
-          npm install @capacitor/core@5 @capacitor/cli@5 @capacitor/android@5 @capacitor/app-launcher@5 @capacitor/geolocation@5 @capacitor/local-notifications@5 @capacitor-community/speech-recognition@5
-          mkdir www && cp ../index.html www/index.html
-          echo '{"appId":"com.zero.assistant","appName":"ZERO","webDir":"www","server":{"androidScheme":"https"}}' > capacitor.config.json
+          npm install @capacitor/core@5 @capacitor/cli@5 @capacitor/android@5 @capacitor/geolocation@5 @capacitor/local-notifications@5 @capacitor-community/speech-recognition@5
+          cat > capacitor.config.json <<'EOF'
+          {
+            "appId": "com.zero.assistant",
+            "appName": "ZERO",
+            "webDir": "www",
+            "server": {
+              "androidScheme": "https"
+            }
+          }
+          EOF
+          test -f www/index.html
           npx cap add android
+
+      - name: Sync Android project
+        working-directory: apk
+        run: |
+          set -euxo pipefail
           npx cap sync android
-          MF=android/app/src/main/AndroidManifest.xml
-          sed -i 's#<application#<uses-permission android:name="android.permission.RECORD_AUDIO"/><uses-permission android:name="android.permission.INTERNET"/><uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/><uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/><uses-permission android:name="android.permission.POST_NOTIFICATIONS"/><application#' $MF
-      - name: I-build ang APK
-        run: cd apk/android && chmod +x gradlew && ./gradlew assembleDebug
-      - uses: actions/upload-artifact@v4
+          test -f android/gradlew
+          test -f android/app/src/main/AndroidManifest.xml
+
+      - name: Add Android permissions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path("apk/android/app/src/main/AndroidManifest.xml")
+          s = p.read_text()
+
+          permissions = [
+              '    <uses-permission android:name="android.permission.INTERNET" />',
+              '    <uses-permission android:name="android.permission.RECORD_AUDIO" />',
+              '    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />',
+              '    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />',
+              '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />',
+          ]
+
+          missing = [
+              line for line in permissions
+              if line.split('"')[1] not in s
+          ]
+
+          if missing:
+              marker = "    <application"
+              if marker not in s:
+                  marker = "<application"
+              if marker not in s:
+                  raise SystemExit("ERROR: Walang application tag sa AndroidManifest.xml")
+
+              s = s.replace(
+                  marker,
+                  "\n".join(missing) + "\n" + marker,
+                  1
+              )
+              p.write_text(s)
+
+          print("Android permissions checked.")
+          PY
+
+      - name: Build debug APK
+        working-directory: apk/android
+        run: |
+          set -euxo pipefail
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload ZERO APK
+        if: success()
+        uses: actions/upload-artifact@v4
         with:
           name: ZERO-apk
           path: apk/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
