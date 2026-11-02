@@ -60,8 +60,24 @@ var cfg={base:"",pw:"",l:"tl",w:false};
 try{Object.assign(cfg,JSON.parse(localStorage.getItem("zero_cfg")||"{}"));}catch(e){}
 function saveCfg(){try{localStorage.setItem("zero_cfg",JSON.stringify(cfg));}catch(e){}}
 var CAP=window.Capacitor,NATIVE=!!(CAP&&CAP.isNativePlatform&&CAP.isNativePlatform());
-function plug(n){return NATIVE&&CAP.Plugins?CAP.Plugins[n]:null;}
+function plug(n){
+  return NATIVE&&CAP&&CAP.Plugins?CAP.Plugins[n]:null;
+}
 function base(){
+  if(cfg.base)return cfg.base.replace(/\/+$/,"");
+
+  var h=location.hostname;
+
+  // Hosted Render website: same-origin API.
+  if(location.protocol.indexOf("http")===0 &&
+     h!=="localhost" &&
+     h!=="127.0.0.1"){
+    return "";
+  }
+
+  // Android APK / local WebView.
+  return "https://zero-ai-android.onrender.com";
+}
   if(cfg.base)return cfg.base.replace(/\/+$/,"");
   var h=location.hostname;
   return (location.protocol.indexOf("http")===0&&h!=="localhost")?"":"https://jarvis-ai-9drf.onrender.com";
@@ -199,63 +215,94 @@ function meter(){
 }
 function speak(text){
   return new Promise(function(done){
+    text=String(text||"").trim();
+
+    if(!text){
+      speaking=false;
+      status(listening?"nakikinig":"handa");
+      done();
+      return;
+    }
+
     speaking=true;
     status("nagsasalita");
     sub(text);
     amp=0.4;
 
     var finished=false;
+    var iv=null;
 
-    var fin=function(){
+    function finish(){
       if(finished)return;
       finished=true;
+
+      if(iv)clearInterval(iv);
+
       speaking=false;
       amp=0;
       status(listening?"nakikinig":"handa");
       done();
-    };
+    }
 
-    try{
-      if(!("speechSynthesis" in window) ||
-         !("SpeechSynthesisUtterance" in window)){
-        sub("Hindi available ang Android Text-to-Speech.");
-        fin();
+    iv=setInterval(function(){
+      if(!speaking){
+        clearInterval(iv);
         return;
       }
+      amp=0.3+Math.random()*0.5;
+    },100);
 
-      var u=new SpeechSynthesisUtterance(text);
-      u.lang=cfg.l==="tl"?"fil-PH":"en-US";
+    // Native Android Text-to-Speech.
+    var TTS=plug("TextToSpeech");
 
-      var voices=speechSynthesis.getVoices();
-      var preferred=voices.find(function(v){
-        return v.default;
+    if(TTS && typeof TTS.speak==="function"){
+      TTS.speak({
+        text:text,
+        lang:cfg.l==="tl"?"fil-PH":"en-US",
+        rate:0.95,
+        pitch:0.95,
+        volume:1.0
+      }).then(function(){
+        finish();
+      }).catch(function(err){
+        console.error("Native TTS error:",err);
+        sub("Hindi gumana ang native voice. Sinusubukan ang browser voice.");
+        browserSpeak();
       });
+      return;
+    }
 
-      if(preferred)u.voice=preferred;
+    browserSpeak();
 
-      var iv=setInterval(function(){
-        if(!speaking){
-          clearInterval(iv);
+    function browserSpeak(){
+      try{
+        if(!("speechSynthesis" in window) ||
+           !("SpeechSynthesisUtterance" in window)){
+          sub("Walang available na Text-to-Speech engine sa device.");
+          finish();
           return;
         }
-        amp=0.3+Math.random()*0.5;
-      },90);
 
-      u.onend=function(){
-        clearInterval(iv);
-        fin();
-      };
+        var u=new SpeechSynthesisUtterance(text);
+        u.lang=cfg.l==="tl"?"fil-PH":"en-US";
+        u.rate=0.95;
+        u.pitch=0.95;
+        u.volume=1;
 
-      u.onerror=function(){
-        clearInterval(iv);
-        fin();
-      };
+        u.onend=finish;
+        u.onerror=function(e){
+          console.error("Browser TTS error:",e);
+          finish();
+        };
 
-      speechSynthesis.cancel();
-      speechSynthesis.speak(u);
+        speechSynthesis.cancel();
+        speechSynthesis.speak(u);
 
-    }catch(e){
-      fin();
+      }catch(e){
+        console.error("TTS error:",e);
+        sub("Hindi makapagsalita ang voice engine.");
+        finish();
+      }
     }
   });
 }
