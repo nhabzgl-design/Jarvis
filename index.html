@@ -77,6 +77,28 @@ function base(){
   return "https://zero-ai-android.onrender.com";
 }
 
+function api(path,body){
+  return fetch(base()+path,{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      "x-app-password":cfg.pw
+    },
+    body:JSON.stringify(body)
+  });
+}
+
+  var h=location.hostname;
+
+  if(location.protocol.indexOf("http")===0 &&
+     h!=="localhost" &&
+     h!=="127.0.0.1"){
+    return "";
+  }
+
+  return "https://zero-ai-android.onrender.com";
+}
+
   var h=location.hostname;
 
   // Hosted Render website: same-origin API.
