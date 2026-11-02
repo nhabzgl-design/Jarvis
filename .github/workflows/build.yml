@@ -1,3 +1,4 @@
+
 name: Build ZERO APK
 
 on:
@@ -12,9 +13,9 @@ permissions:
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build ZERO Android APK
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
 
     steps:
       - name: Checkout repository
@@ -23,13 +24,14 @@ jobs:
       - name: Check source file
         run: |
           set -euxo pipefail
-          test -f index.html
+          test -s index.html
           ls -lh index.html
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: npm
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -44,7 +46,16 @@ jobs:
           cp index.html apk/www/index.html
           cd apk
           npm init -y
-          npm install @capacitor/core@5 @capacitor/cli@5 @capacitor/android@5 @capacitor/geolocation@5 @capacitor/local-notifications@5 @capacitor-community/speech-recognition@5
+
+          npm install \
+            @capacitor/core@5 \
+            @capacitor/cli@5 \
+            @capacitor/android@5 \
+            @capacitor/geolocation@5 \
+            @capacitor/local-notifications@5 \
+            @capacitor-community/speech-recognition@5 \
+            @capacitor-community/text-to-speech@3.0.1
+
           cat > capacitor.config.json <<'EOF'
           {
             "appId": "com.zero.assistant",
@@ -55,7 +66,8 @@ jobs:
             }
           }
           EOF
-          test -f www/index.html
+
+          test -s www/index.html
           npx cap add android
 
       - name: Sync Android project
@@ -91,8 +103,9 @@ jobs:
               marker = "    <application"
               if marker not in s:
                   marker = "<application"
+
               if marker not in s:
-                  raise SystemExit("ERROR: Walang application tag sa AndroidManifest.xml")
+                  raise SystemExit("ERROR: Walang application tag sa manifest.")
 
               s = s.replace(
                   marker,
@@ -110,7 +123,7 @@ jobs:
           set -euxo pipefail
           chmod +x gradlew
           ./gradlew assembleDebug --stacktrace
-          test -f app/build/outputs/apk/debug/app-debug.apk
+          test -s app/build/outputs/apk/debug/app-debug.apk
           ls -lh app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload ZERO APK
