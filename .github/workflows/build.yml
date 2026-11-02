@@ -1,135 +1,53 @@
-
 name: Build ZERO APK
-
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - ".github/workflows/build.yml"
-      - "index.html"
-
-permissions:
-  contents: read
-
+defaults:
+  run:
+    shell: bash
 jobs:
   build:
-    name: Build ZERO Android APK
     runs-on: ubuntu-latest
-    timeout-minutes: 35
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Check source file
-        run: |
-          set -euxo pipefail
-          test -s index.html
-          ls -lh index.html
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-         node-version: 20
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
+          node-version: 20
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
-
-      - name: Create Capacitor project
+          java-version: 17
+      - name: Tingnan kung nandito ang index.html
         run: |
-          set -euxo pipefail
-          mkdir -p apk/www
-          cp index.html apk/www/index.html
-          cd apk
-          npm init -y
-
-          npm install \
-            @capacitor/core@5 \
-            @capacitor/cli@5 \
-            @capacitor/android@5 \
-            @capacitor/geolocation@5 \
-            @capacitor/local-notifications@5 \
-            @capacitor-community/speech-recognition@5 \
-            @capacitor-community/text-to-speech@3.0.1
-
-          cat > capacitor.config.json <<'EOF'
-          {
-            "appId": "com.zero.assistant",
-            "appName": "ZERO",
-            "webDir": "www",
-            "server": {
-              "androidScheme": "https"
-            }
-          }
-          EOF
-
-          test -s www/index.html
-          npx cap add android
-
-      - name: Sync Android project
-        working-directory: apk
+          ls -la | tee -a log.txt
+          test -f index.html || { echo "WALA ang index.html sa root ng repo" | tee -a log.txt; exit 1; }
+      - name: Gawin ang Android project
         run: |
-          set -euxo pipefail
-          npx cap sync android
-          test -f android/gradlew
-          test -f android/app/src/main/AndroidManifest.xml
-
-      - name: Add Android permissions
+          LOG=$GITHUB_WORKSPACE/log.txt
+          mkdir apk && cd apk
+          (
+            npm init -y
+            npm install --legacy-peer-deps @capacitor/core@5.7 @capacitor/cli@5.7 @capacitor/android@5.7 @capacitor/app-launcher@5 @capacitor/geolocation@5 @capacitor/local-notifications@5 @capacitor-community/speech-recognition@5 @capacitor-community/text-to-speech@5
+            mkdir www
+            cp ../index.html www/index.html
+            echo '{"appId":"com.zero.assistant","appName":"ZERO","webDir":"www","server":{"androidScheme":"https"}}' > capacitor.config.json
+            npx cap add android
+            npx cap sync android
+            MF=android/app/src/main/AndroidManifest.xml
+            sed -i 's#<application#<uses-permission android:name="android.permission.RECORD_AUDIO"/><uses-permission android:name="android.permission.INTERNET"/><uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/><uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/><uses-permission android:name="android.permission.POST_NOTIFICATIONS"/><queries><intent><action android:name="android.intent.action.TTS_SERVICE"/></intent><intent><action android:name="android.speech.RecognitionService"/></intent></queries><application#' $MF
+          ) 2>&1 | tee -a $LOG
+      - name: I-build ang APK
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          p = Path("apk/android/app/src/main/AndroidManifest.xml")
-          s = p.read_text()
-
-          permissions = [
-              '    <uses-permission android:name="android.permission.INTERNET" />',
-              '    <uses-permission android:name="android.permission.RECORD_AUDIO" />',
-              '    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />',
-              '    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />',
-              '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />',
-          ]
-
-          missing = [
-              line for line in permissions
-              if line.split('"')[1] not in s
-          ]
-
-          if missing:
-              marker = "    <application"
-              if marker not in s:
-                  marker = "<application"
-
-              if marker not in s:
-                  raise SystemExit("ERROR: Walang application tag sa manifest.")
-
-              s = s.replace(
-                  marker,
-                  "\n".join(missing) + "\n" + marker,
-                  1
-              )
-              p.write_text(s)
-
-          print("Android permissions checked.")
-          PY
-
-      - name: Build debug APK
-        working-directory: apk/android
-        run: |
-          set -euxo pipefail
+          cd apk/android
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
-          test -s app/build/outputs/apk/debug/app-debug.apk
-          ls -lh app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Upload ZERO APK
-        if: success()
-        uses: actions/upload-artifact@v4
+          ./gradlew assembleDebug --stacktrace 2>&1 | tee -a $GITHUB_WORKSPACE/log.txt
+      - name: Ipakita ang error
+        if: failure()
+        run: |
+          echo '### Nag-fail. Huling bahagi ng log:' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -n 70 log.txt >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+      - uses: actions/upload-artifact@v4
         with:
           name: ZERO-apk
           path: apk/android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 7
