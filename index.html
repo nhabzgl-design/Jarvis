@@ -118,16 +118,6 @@ return (location.protocol.indexOf("http")===0&&h!=="localhost")?"":"https://jarv
   var h=location.hostname;
   return (location.protocol.indexOf("http")===0&&h!=="localhost")?"":"https://jarvis-ai-9drf.onrender.com";
 }
-function api(path,body){
-  return fetch(base()+path,{
-    method:"POST",
-    headers:{
-      "Content-Type":"application/json",
-      "x-app-password":cfg.pw
-    },
-    body:JSON.stringify(body)
-  });
-}
 
 /* ================= clone engine: layers cut from the reference render ================= */
 var amp=0,ampT=0,speaking=false,listening=false,busy=false,hud="handa";
