@@ -199,16 +199,66 @@ function meter(){
 }
 function speak(text){
   return new Promise(function(done){
-    speaking=true;status("nagsasalita");sub(text);amp=0.4;
-    var fin=function(){speaking=false;amp=0;status(listening?"nakikinig":"handa");done();};
-    var fallback=function(){
-      try{
-        var u=new SpeechSynthesisUtterance(text);u.lang=cfg.l==="tl"?"fil-PH":"en-US";
-        var iv=setInterval(function(){amp=0.3+Math.random()*0.5;},90);
-        u.onend=u.onerror=function(){clearInterval(iv);fin();};
-        speechSynthesis.cancel();speechSynthesis.speak(u);
-      }catch(e){fin();}
+    speaking=true;
+    status("nagsasalita");
+    sub(text);
+    amp=0.4;
+
+    var finished=false;
+
+    var fin=function(){
+      if(finished)return;
+      finished=true;
+      speaking=false;
+      amp=0;
+      status(listening?"nakikinig":"handa");
+      done();
     };
+
+    try{
+      if(!("speechSynthesis" in window) ||
+         !("SpeechSynthesisUtterance" in window)){
+        sub("Hindi available ang Android Text-to-Speech.");
+        fin();
+        return;
+      }
+
+      var u=new SpeechSynthesisUtterance(text);
+      u.lang=cfg.l==="tl"?"fil-PH":"en-US";
+
+      var voices=speechSynthesis.getVoices();
+      var preferred=voices.find(function(v){
+        return v.default;
+      });
+
+      if(preferred)u.voice=preferred;
+
+      var iv=setInterval(function(){
+        if(!speaking){
+          clearInterval(iv);
+          return;
+        }
+        amp=0.3+Math.random()*0.5;
+      },90);
+
+      u.onend=function(){
+        clearInterval(iv);
+        fin();
+      };
+
+      u.onerror=function(){
+        clearInterval(iv);
+        fin();
+      };
+
+      speechSynthesis.cancel();
+      speechSynthesis.speak(u);
+
+    }catch(e){
+      fin();
+    }
+  });
+}
     ensureAudio();
     api("/api/tts",{text:text}).then(function(r){if(!r.ok)throw new Error("tts "+r.status);return r.blob();})
     .then(function(b){
