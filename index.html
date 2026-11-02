@@ -43,7 +43,7 @@ input[type=text],input[type=password]{width:100%;padding:12px;border-radius:8px;
   <h2>Setup ni Zero</h2>
   <p>Nasa Render ang Gemini API key. Ang boses ni ZERO ay gumagamit ng Android Text-to-Speech.</p>
   <label>Server URL (iwanang blangko kung dito mismo naka-host)</label>
-  <input type="text" id="ku" autocomplete="off" placeholder="https://zero-ai-android.onrender.com"
+  <input type="text" id="ku" autocomplete="off" placeholder="https://zero-ai-android.onrender.com">
   <label>APP_PASSWORD</label>
   <input type="password" id="kp" autocomplete="off">
   <div class="row"><input type="checkbox" id="kw"><span>Sumagot lang kapag tinawag na "Zero"</span></div>
@@ -68,6 +68,17 @@ function base(){
 
   var h=location.hostname;
 
+  if(location.protocol.indexOf("http")===0 &&
+     h!=="localhost" &&
+     h!=="127.0.0.1"){
+    return "";
+  }
+
+  return "https://zero-ai-android.onrender.com";
+}
+
+  var h=location.hostname;
+
   // Hosted Render website: same-origin API.
   if(location.protocol.indexOf("http")===0 &&
      h!=="localhost" &&
@@ -79,6 +90,9 @@ function base(){
   return "https://zero-ai-android.onrender.com";
 }
   if(cfg.base)return cfg.base.replace(/\/+$/,"");
+var h=location.hostname;
+return (location.protocol.indexOf("http")===0&&h!=="localhost")?"":"https://jarvis-ai-9drf.onrender.com";
+  }
   var h=location.hostname;
   return (location.protocol.indexOf("http")===0&&h!=="localhost")?"":"https://jarvis-ai-9drf.onrender.com";
 }
