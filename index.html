@@ -41,9 +41,9 @@ input[type=text],input[type=password]{width:100%;padding:12px;border-radius:8px;
 </div>
 <div id="set">
   <h2>Setup ni Zero</h2>
-  <p>Nasa server (Render) ang Gemini at ElevenLabs key. Dito, URL ng server at password lang.</p>
+  <p>Nasa Render ang Gemini API key. Ang boses ni ZERO ay gumagamit ng Android Text-to-Speech.</p>
   <label>Server URL (iwanang blangko kung dito mismo naka-host)</label>
-  <input type="text" id="ku" autocomplete="off" placeholder="https://jarvis-ai-9drf.onrender.com">
+  <input type="text" id="ku" autocomplete="off" placeholder="https://zero-ai-android.onrender.com"
   <label>APP_PASSWORD</label>
   <input type="password" id="kp" autocomplete="off">
   <div class="row"><input type="checkbox" id="kw"><span>Sumagot lang kapag tinawag na "Zero"</span></div>
@@ -362,7 +362,11 @@ var hist=[];
 function ask(text){
   return api("/api/chat",{history:hist,text:text,now:new Date().toLocaleString("fil-PH")}).then(function(r){
     if(r.status===401)throw new Error("Mali o kulang ang password. Ilagay sa SET.");
-    if(!r.ok)throw new Error("server "+r.status);
+    if(!r.ok){
+  return r.json().catch(function(){return {};}).then(function(o){
+    throw new Error(o.error||("Server error "+r.status));
+  });
+    }
     return r.json();
   }).then(function(o){
     hist.push({r:"user",t:text});hist.push({r:"model",t:o.say||""});
