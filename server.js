@@ -1,9 +1,12 @@
-// ZERO AI server: hawak dito ang API keys.
-// Huwag ilagay ang API keys sa phone o sa code.
+
+// ZERO AI SERVER
+// Gemini API key stays on Render. No ElevenLabs dependency.
 
 const express = require("express");
 const path = require("path");
+
 const app = express();
+app.disable("x-powered-by");
 
 app.use((req, res, next) => {
   res.set("Access-Control-Allow-Origin", "*");
@@ -23,60 +26,97 @@ app.get(["/", "/index.html"], (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
-const auth = (req, res, next) => {
-  const pw = process.env.APP_PASSWORD;
+// API endpoints require APP_PASSWORD.
+// Fail closed: do not allow access when the password is missing.
+function auth(req, res, next) {
+  const expected = process.env.APP_PASSWORD;
 
-  if (pw && req.get("x-app-password") !== pw) {
-    return res.status(401).json({ error: "Mali ang password." });
+  if (!expected) {
+    return res.status(503).json({
+      error: "Hindi naka-set ang APP_PASSWORD sa Render."
+    });
+  }
+
+  if (req.get("x-app-password") !== expected) {
+    return res.status(401).json({
+      error: "Mali o kulang ang password."
+    });
   }
 
   next();
-};
+}
 
-const SYS = `Ikaw si ZERO, isang AI humanoid assistant na may holographic na katawan at boses ng lalaki. Gumagawa ka ng task sa phone ng may-ari.
-Sumagot sa wika ng nagsalita (Tagalog, English o Taglish), natural at maikli (1-3 pangungusap) dahil papakinggan ito. Walang markdown, walang emoji.
-Ibalik LAGI ang JSON lang: {"say":"sagot","action":null o object}.
+const SYS = `Ikaw si ZERO, isang AI humanoid assistant na may holographic na katawan at boses ng lalaki. Assistant ka ng may-ari ng phone.
+Sumagot sa wika ng nagsalita: Tagalog, English o Taglish. Natural, malinaw at maikli, karaniwang 1 hanggang 3 pangungusap dahil pakikinggan ang sagot. Walang markdown at walang emoji.
+Ibalik LAGI ang valid JSON lamang sa format na {"say":"sagot","action":null o object}.
 Mga action:
-{"type":"google","q":"..."} {"type":"youtube","q":"..."} {"type":"facebook","q":"..."} {"type":"maps","q":"..."}
+{"type":"google","q":"..."}
+{"type":"youtube","q":"..."}
+{"type":"facebook","q":"..."}
+{"type":"maps","q":"..."}
 {"type":"app","name":"messenger|facebook|youtube|whatsapp|maps|camera|settings"}
-{"type":"call","number":"..."} {"type":"sms","number":"...","body":"..."}
-{"type":"time"} {"type":"location"} {"type":"timer","seconds":number,"label":"..."} {"type":"alarm","time":"HH:MM","label":"..."}
-Kung kailangan ng oras o lokasyon, maglagay ng action at maikling 'say' lang; ang app ang magsasabi ng resulta. Kung walang task, action ay null. Huwag mag-imbento ng resulta ng action.`;
+{"type":"call","number":"..."}
+{"type":"sms","number":"...","body":"..."}
+{"type":"time"}
+{"type":"location"}
+{"type":"timer","seconds":number,"label":"..."}
+{"type":"alarm","time":"HH:MM","label":"..."}
+Kung kailangan ng oras o lokasyon, maglagay ng action at maikling say lang. Ang app ang magsasabi ng resulta. Kung walang phone task, action ay null. Huwag mag-imbento ng resulta ng action.`;
 
 app.get("/api/ping", auth, (req, res) => {
-  res.json({ ok: true, name: "zero" });
+  res.json({
+    ok: true,
+    name: "ZERO",
+    ai: Boolean(process.env.GEMINI_API_KEY)
+  });
 });
 
-// GEMINI AI CHAT
 app.post("/api/chat", auth, async (req, res) => {
   try {
     const key = process.env.GEMINI_API_KEY;
 
     if (!key) {
-      return res.status(500).json({
+      return res.status(503).json({
         error: "Walang GEMINI_API_KEY sa Render."
       });
     }
 
-    const model =
-      process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    const text = String(req.body?.text || "").trim();
 
-    const hist = Array.isArray(req.body.history)
+    if (!text) {
+      return res.status(400).json({
+        error: "Walang natanggap na mensahe."
+      });
+    }
+
+    if (text.length > 4000) {
+      return res.status(413).json({
+        error: "Masyadong mahaba ang mensahe."
+      });
+    }
+
+    const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+
+    const history = Array.isArray(req.body?.history)
       ? req.body.history.slice(-12)
       : [];
 
-    const contents = hist.map(h => ({
-      role: h.r === "model" ? "model" : "user",
-      parts: [{ text: String(h.t || "") }]
-    }));
+    const contents = history
+      .filter(item => item && typeof item === "object")
+      .map(item => ({
+        role: item.r === "model" ? "model" : "user",
+        parts: [{
+          text: String(item.t || "").slice(0, 4000)
+        }]
+      }));
 
     contents.push({
       role: "user",
-      parts: [{ text: String(req.body.text || "") }]
+      parts: [{ text }]
     });
 
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`,
       {
         method: "POST",
         headers: {
@@ -85,8 +125,8 @@ app.post("/api/chat", auth, async (req, res) => {
         body: JSON.stringify({
           systemInstruction: {
             parts: [{
-              text: SYS + " Ngayon: " +
-                (req.body.now || new Date().toISOString())
+              text: SYS + "\nNgayon: " +
+                String(req.body?.now || new Date().toISOString())
             }]
           },
           contents,
@@ -94,128 +134,77 @@ app.post("/api/chat", auth, async (req, res) => {
             responseMimeType: "application/json",
             temperature: 0.7
           }
-        })
+        }),
+        signal: AbortSignal.timeout(45000)
       }
     );
 
-    // IPAPAKITA ANG DETALYE KAPAG MAY GEMINI ERROR
-    if (!r.ok) {
-      const detail = (await r.text()).slice(0, 700);
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 500);
 
-      console.error(
-        "Gemini API error:",
-        r.status,
-        detail
-      );
+      console.error("Gemini API error:", response.status, detail);
 
       return res.status(502).json({
-        error: "Gemini API " + r.status,
-        detail: detail
+        error: `Hindi nakasagot ang Gemini API (${response.status}).`
       });
     }
 
-    const j = await r.json();
+    const result = await response.json();
+    const raw = result?.candidates?.[0]?.content?.parts
+      ?.map(part => part.text || "")
+      .join("")
+      .trim();
 
-    const raw =
-      j?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    if (!raw) {
+      return res.status(502).json({
+        error: "Walang natanggap na sagot mula sa Gemini."
+      });
+    }
 
-    let o;
+    let parsed;
 
     try {
-      o = JSON.parse(
-        raw.replace(/```json|```/g, "").trim()
+      parsed = JSON.parse(
+        raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "")
       );
     } catch {
-      o = {
+      parsed = {
         say: raw,
         action: null
       };
     }
 
-    res.json({
-      say: o.say || "",
-      action: o.action || null
-    });
+    const say = String(parsed.say || "").slice(0, 5000);
+    const action = parsed.action && typeof parsed.action === "object"
+      ? parsed.action
+      : null;
 
-  } catch (e) {
-    console.error("Chat server error:", e);
+    return res.json({ say, action });
 
-    res.status(500).json({
-      error: String(e.message || e)
+  } catch (error) {
+    console.error("ZERO chat error:", error);
+
+    if (error.name === "TimeoutError") {
+      return res.status(504).json({
+        error: "Nag-timeout ang koneksyon sa Gemini."
+      });
+    }
+
+    return res.status(500).json({
+      error: "May problema sa ZERO server."
     });
   }
 });
 
-// ELEVENLABS VOICE
-app.post("/api/tts", auth, async (req, res) => {
-  try {
-    const key = process.env.ELEVENLABS_API_KEY;
-
-    if (!key) {
-      return res.status(500).json({
-        error: "Walang ELEVENLABS_API_KEY sa Render."
-      });
-    }
-
-    // Adam voice
-    const voice =
-      process.env.ZERO_VOICE_ID ||
-      "pNInz6obpgDQGcFmaJgB";
-
-    const r = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voice}?output_format=mp3_44100_128`,
-      {
-        method: "POST",
-        headers: {
-          "xi-api-key": key,
-          "Content-Type": "application/json",
-          "Accept": "audio/mpeg"
-        },
-        body: JSON.stringify({
-          text: String(req.body.text || "").slice(0, 900),
-          model_id:
-            process.env.ELEVEN_MODEL ||
-            "eleven_multilingual_v2",
-          voice_settings: {
-            stability: 0.45,
-            similarity_boost: 0.8
-          }
-        })
-      }
-    );
-
-    // IPAPAKITA ANG DETALYE KAPAG MAY ELEVENLABS ERROR
-    if (!r.ok) {
-      const detail = (await r.text()).slice(0, 700);
-
-      console.error(
-        "ElevenLabs API error:",
-        r.status,
-        detail
-      );
-
-      return res.status(502).json({
-        error: "ElevenLabs API " + r.status,
-        detail: detail
-      });
-    }
-
-    res.set("Content-Type", "audio/mpeg");
-
-    res.send(
-      Buffer.from(await r.arrayBuffer())
-    );
-
-  } catch (e) {
-    console.error("TTS server error:", e);
-
-    res.status(500).json({
-      error: String(e.message || e)
-    });
-  }
+// Walang /api/tts at walang ElevenLabs.
+app.use((req, res) => {
+  res.status(404).json({
+    error: "Hindi makita ang API route."
+  });
 });
 
-app.listen(
-  process.env.PORT || 3000,
-  () => console.log("ZERO server running")
-);
+const PORT = Number(process.env.PORT) || 3000;
+
+app.listen(PORT, () => {
+  console.log(`ZERO server running on port ${PORT}`);
+});
