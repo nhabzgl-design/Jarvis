@@ -93,34 +93,127 @@ async function generate(model, body) {
 
 async function generateWithFallback(body) {
   let avail = null;
-  try { avail = await listModels(false); } catch (e) {
-    if (e instanceof GErr && (e.code === "gemini_key_invalid" || e.code === "gemini_key_denied")) throw e;
-    log({ ev: "listModels_failed", code: e.code }); // tuloy gamit ang default na listahan
+
+  try {
+    avail = await listModels(false);
+  } catch (e) {
+    if (
+      e instanceof GErr &&
+      (e.code === "gemini_key_invalid" ||
+       e.code === "gemini_key_denied")
+    ) {
+      throw e;
+    }
+
+    log({
+      ev: "listModels_failed",
+      code: e.code || "unknown"
+    });
   }
+
   const tried = [];
-  let lastErr = null, retried = false;
+  let lastErr = null;
+
   for (const model of candidates(avail)) {
-    for (let attempt = 0; attempt < 2; attempt++) {
+    let modelSucceeded = false;
+
+    for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const j = await generate(model, body);
-        if (goodModel !== model) log({ ev: "model_selected", model });
+
+        if (goodModel !== model) {
+          log({
+            ev: "model_selected",
+            model
+          });
+        }
+
         goodModel = model;
+        modelSucceeded = true;
+
         return { j, model };
+
       } catch (e) {
         lastErr = e;
-        if (!(e instanceof GErr)) throw e;
-        log({ ev: "gemini_error", model, code: e.code, upstream: e.upstream });
-        if (e.code === "gemini_unavailable" && attempt === 0 && !retried) { retried = true; await new Promise(r => setTimeout(r, 800)); continue; }
+
+        if (!(e instanceof GErr)) {
+          throw e;
+        }
+
+        log({
+          ev: "gemini_error",
+          model,
+          code: e.code,
+          upstream: e.upstream,
+          attempt: attempt + 1
+        });
+
+        // Huwag mag-retry kapag invalid o denied ang API key.
+        if (
+          e.code === "gemini_key_invalid" ||
+          e.code === "gemini_key_denied"
+        ) {
+          throw e;
+        }
+
+        // Retry kapag overloaded o pansamantalang unavailable.
+        const retryable =
+          e.code === "gemini_unavailable" ||
+          e.code === "gemini_quota";
+
+        if (retryable && attempt < 2) {
+          const waitMs = 1500 * (attempt + 1);
+
+          await new Promise(resolve =>
+            setTimeout(resolve, waitMs)
+          );
+
+          continue;
+        }
+
         break;
       }
     }
+
     tried.push(model);
-    if (lastErr.code !== "gemini_model_not_found") throw lastErr; // iba ang problema, hindi model
-    if (goodModel === model) goodModel = null;
-    try { avail = await listModels(true); } catch (e) {}
+
+    if (modelSucceeded) {
+      break;
+    }
+
+    // Kapag model lang ang hindi makita, i-refresh ang listahan.
+    if (
+      lastErr &&
+      lastErr.code === "gemini_model_not_found"
+    ) {
+      if (goodModel === model) {
+        goodModel = null;
+      }
+
+      try {
+        avail = await listModels(true);
+      } catch (e) {
+        log({
+          ev: "model_refresh_failed",
+          code: e.code || "unknown"
+        });
+      }
+
+      continue;
+    }
+
+    // Huwag basta magpalit ng model para sa ibang uri ng error.
+    throw lastErr;
   }
-  throw new GErr("gemini_model_not_found",
-    "Walang gumaganang Gemini model. Sinubukan: " + tried.join(", ") + ". Itakda ang GEMINI_MODEL sa Render sa model na nasa /api/diag.", 502, 404);
+
+  throw new GErr(
+    "gemini_model_not_found",
+    "Walang gumaganang Gemini model. Sinubukan: " +
+      tried.join(", ") +
+      ". Tingnan ang /api/diag at ang GEMINI_MODEL sa Render.",
+    502,
+    404
+  );
 }
 
 /* ---------- chat ---------- */
