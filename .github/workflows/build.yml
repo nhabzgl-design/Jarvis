@@ -1,5 +1,8 @@
 name: Build ZERO APK
 on:
+  push:
+    branches:
+      - feat/zero-jarvis-interface
   workflow_dispatch:
 defaults:
   run:
