@@ -28,6 +28,32 @@ input[type=text],input[type=password]{width:100%;padding:12px;border-radius:8px;
 .row{display:flex;align-items:center;gap:10px;margin-top:14px;font-size:14px}
 #dbg{position:fixed;top:calc(env(safe-area-inset-top,0px) + 34px);left:8px;right:8px;font:10px/1.35 ui-monospace,Menlo,monospace;color:#9fe3ff;white-space:pre-wrap;pointer-events:none;display:none;text-shadow:0 1px 3px #000;max-height:34vh;overflow:hidden}
 .btn{margin-top:18px;padding:13px 18px;border-radius:8px;border:0;background:var(--cy);color:#00202e;font-weight:700;font-size:15px;width:100%}
+
+/* ZERO JARVIS HUD — visual layer only; voice and assistant logic remain unchanged */
+#jarvisHud{position:fixed;inset:0;z-index:2;pointer-events:none;color:#9feaff;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.12em;text-shadow:0 0 10px #24bfff88}
+.jh-top{position:absolute;top:calc(env(safe-area-inset-top,0px) + 12px);right:14px;display:flex;align-items:center;gap:9px;font-size:9px;font-weight:800}
+.jh-mark{padding:6px 8px;border:1px solid #38c8ff66;background:#071722aa;clip-path:polygon(0 0,100% 0,100% 70%,88% 100%,0 100%)}
+.jh-dot{width:6px;height:6px;border-radius:50%;background:#54e7ff;box-shadow:0 0 10px #54e7ff;animation:jhPulse 1.8s infinite}
+#jh-status{color:#e7fbff}
+.jh-side{position:absolute;top:31%;width:76px;font-size:8px;line-height:2.1;color:#70cde8aa}
+.jh-left{left:9px;text-align:left}
+.jh-right{right:9px;text-align:right}
+.jh-side b{display:block;color:#a8edff;font-size:9px;font-weight:700}
+.jh-bars{height:3px;margin:5px 0 10px;background:linear-gradient(90deg,#35caff,#35caff33);box-shadow:0 0 8px #35caff66}
+.jh-right .jh-bars{background:linear-gradient(270deg,#35caff,#35caff33)}
+.jh-ring{position:absolute;left:50%;top:42%;width:min(76vw,390px);aspect-ratio:1;transform:translate(-50%,-50%);border:1px solid #43cfff35;border-radius:50%;box-shadow:0 0 22px #20bfff16,inset 0 0 22px #20bfff12}
+.jh-ring:before,.jh-ring:after{content:"";position:absolute;inset:7%;border:1px dashed #63dfff35;border-radius:50%;animation:jhSpin 28s linear infinite}
+.jh-ring:after{inset:16%;border-style:solid;border-color:#52d7ff22;animation-direction:reverse;animation-duration:19s}
+.jh-sweep{position:absolute;inset:-1px;border-radius:50%;background:conic-gradient(from 0deg,transparent 0 76%,#52dfff66 84%,transparent 91%);mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 1px));animation:jhSpin 8s linear infinite}
+.jh-corners{position:absolute;inset:8px;border:1px solid #42caff18}
+.jh-corners:before,.jh-corners:after{content:"";position:absolute;left:0;right:0;height:18px;border-left:2px solid #49d7ff88;border-right:2px solid #49d7ff88}
+.jh-corners:before{top:0;border-top:2px solid #49d7ff88}.jh-corners:after{bottom:0;border-bottom:2px solid #49d7ff88}
+.jh-foot{position:absolute;left:14px;right:14px;bottom:calc(env(safe-area-inset-bottom,0px) + 94px);display:flex;justify-content:space-between;align-items:center;font-size:8px;color:#75cce5aa}
+.jh-foot strong{color:#c6f5ff;font-size:9px}
+@keyframes jhSpin{to{transform:rotate(360deg)}}
+@keyframes jhPulse{50%{opacity:.35;box-shadow:0 0 3px #54e7ff}}
+@media(max-width:360px){.jh-side{width:58px;font-size:7px}.jh-ring{width:70vw}.jh-foot{font-size:7px}}
+
 </style>
 </head>
 <body>
@@ -35,6 +61,16 @@ input[type=text],input[type=password]{width:100%;padding:12px;border-radius:8px;
 <div id="name">ZERO</div>
 <div id="sub"></div>
 <div id="heard"></div>
+
+<div id="jarvisHud" aria-hidden="true">
+  <div class="jh-corners"></div>
+  <div class="jh-top"><span class="jh-mark">ZERO / J.A.R.V.I.S.</span><i class="jh-dot"></i><span id="jh-status">STANDBY</span></div>
+  <div class="jh-ring"><div class="jh-sweep"></div></div>
+  <div class="jh-side jh-left"><b>NEURAL LINK</b>ONLINE<div class="jh-bars"></div><b>VOICE INPUT</b>READY<div class="jh-bars"></div>SECURE<br>CHANNEL</div>
+  <div class="jh-side jh-right"><b>CORE</b>ACTIVE<div class="jh-bars"></div><b>RESPONSE</b>READY<div class="jh-bars"></div>AI SYSTEM<br>V2.0</div>
+  <div class="jh-foot"><span>HOLOGRAPHIC INTERFACE</span><strong id="jh-mode">SYSTEM READY</strong><span>● ENCRYPTED</span></div>
+</div>
+
 <div id="dbg"></div>
 <div id="bar">
   <button class="b" id="lang" aria-label="Wika">TL</button>
@@ -210,6 +246,10 @@ function setState(s){
 function refreshHud(){
   hud=state==="listening"?(awakeUntil>Date.now()?"naghihintay":"nakikinig"):({idle:"handa",processing:"nag-iisip",speaking:"nagsasalita"})[state];
   $("mic").classList.toggle("on",listening);
+  var label=HUDMAP[hud]||"STANDBY";
+  var hs=$("jh-status"),hm=$("jh-mode");
+  if(hs)hs.textContent=label;
+  if(hm)hm.textContent=label==="LISTENING"?"VOICE LINK ACTIVE":label==="THINKING"?"PROCESSING REQUEST":label==="SPEAKING"?"VOICE OUTPUT ACTIVE":label==="AWAITING COMMAND"?"WAKE WORD DETECTED":"SYSTEM READY";
 }
 
 /* ================= text helpers ================= */
