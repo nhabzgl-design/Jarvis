@@ -1,14 +1,19 @@
 [package]
 name = "openjarvis-desktop"
 version = "1.0.1"
-description = "OpenJarvis Desktop — Native AI assistant with energy monitoring, trace debugging, and learning visualization"
+description = "OpenJarvis desktop and Android application"
 edition = "2021"
 license = "MIT"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
-[dependencies]
+# The Android shell uses only Tauri itself. Desktop-only plugins and process
+# dependencies are intentionally excluded from the Android target.
+[target.'cfg(target_os = "android")'.dependencies]
+tauri = "2"
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
 toml_edit = "0.25"
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-notification = "2"
@@ -24,10 +29,7 @@ serde_json = "1"
 reqwest = { version = "0.13", features = ["json", "multipart"] }
 tokio = { version = "1", features = ["full"] }
 
-# Cloud API keys are stored in the OS credential store via `keyring`. keyring v3
-# enables NO backend by default — without an explicit per-platform feature it
-# silently falls back to a non-persistent in-memory mock, so keys would not
-# survive an app restart. Each desktop target opts into its native store.
+# Desktop OS credential stores only; these are not part of the Android build.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
 dispatch = "0.2"
@@ -37,8 +39,6 @@ keyring = { version = "3", features = ["apple-native"] }
 keyring = { version = "3", features = ["windows-native"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-# Blocking Secret Service backend (no internal async runtime, so it is safe to
-# call from the tokio-driven Tauri commands). Needs libdbus-1-dev at build time.
 keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
 
 [features]
