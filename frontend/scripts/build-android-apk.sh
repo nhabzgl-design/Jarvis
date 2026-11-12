@@ -35,31 +35,41 @@ from pathlib import Path
 import re
 
 android_root = Path("src-tauri/gen/android")
-settings_candidates = sorted(
-    [*android_root.rglob("settings.gradle.kts")],
-    key=lambda p: (len(p.parts), str(p))
-)
-app_candidates = sorted(
-    [*android_root.rglob("app/build.gradle.kts")],
-    key=lambda p: (len(p.parts), str(p))
-)
-if not settings_candidates:
-    raise SystemExit(f"No settings.gradle.kts found under {android_root}")
-if not app_candidates:
-    raise SystemExit(f"No app/build.gradle.kts found under {android_root}")
-settings = settings_candidates[0]
-app_gradle = app_candidates[0]
+# Gradle only reads the settings file at the project root passed to gradlew.
+# Do not accidentally patch a nested settings file belonging to a plugin/sample.
+root_settings = [
+    android_root / "settings.gradle.kts",
+    android_root / "settings.gradle",
+]
+settings_matches = [p for p in root_settings if p.is_file()]
+if len(settings_matches) != 1:
+    found = [str(p) for p in android_root.rglob("settings.gradle*")]
+    raise SystemExit(
+        f"Expected exactly one root Gradle settings file under {android_root}; "
+        f"root matches={list(map(str, settings_matches))}; discovered={found}"
+    )
+settings = settings_matches[0]
+app_gradle = android_root / "app" / "build.gradle.kts"
 lib_gradle = android_root / "llama.cpp" / "examples" / "llama.android" / "lib" / "build.gradle.kts"
 settings_dir = settings.parent
-llama_project_dir = (android_root / "llama.cpp" / "examples" / "llama.android" / "lib").relative_to(settings_dir)
+llama_project_dir = (
+    android_root / "llama.cpp" / "examples" / "llama.android" / "lib"
+).relative_to(settings_dir)
 
 
 s = settings.read_text()
-include_line = 'include(":llama-lib")'
-project_line = f'project(":llama-lib").projectDir = file("{llama_project_dir.as_posix()}")'
-if include_line not in s:
-    s += f"\n// ZERO local GGUF inference engine (pinned llama.cpp Android sample).\n{include_line}\n{project_line}\n"
-    settings.write_text(s)
+if settings.suffix == ".kts":
+    include_line = 'include(":llama-lib")'
+    project_line = f'project(":llama-lib").projectDir = file("{llama_project_dir.as_posix()}")'
+    if include_line not in s:
+        s += f"\n// ZERO local GGUF inference engine (pinned llama.cpp Android sample).\n{include_line}\n{project_line}\n"
+        settings.write_text(s)
+else:
+    include_line = "include ':llama-lib'"
+    project_line = f'project(":llama-lib").projectDir = file("{llama_project_dir.as_posix()}")'
+    if include_line not in s:
+        s += f"\n// ZERO local GGUF inference engine (pinned llama.cpp Android sample).\n{include_line}\n{project_line}\n"
+        settings.write_text(s)
 
 lib = lib_gradle.read_text()
 lib = lib.replace(
