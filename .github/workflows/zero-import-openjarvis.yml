@@ -39,6 +39,11 @@ jobs:
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
           cp -a "$SOURCE_DIR"/. .
           rm -f .github/workflows/zero-import-openjarvis.yml
+          if [ -d .github/workflows ]; then
+            mkdir -p .github/workflows-disabled
+            cp -a .github/workflows/. .github/workflows-disabled/
+            rm -rf .github/workflows
+          fi
 
       - name: Commit imported source
         shell: bash
