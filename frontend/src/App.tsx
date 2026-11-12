@@ -18,7 +18,16 @@ import { UpdateChecker } from './components/Desktop/UpdateChecker';
 import { track, hashId } from './lib/analytics';
 import { offerAnalyticsChoice } from './lib/analytics-invitation';
 
+import { MobileShell } from './mobile/MobileShell';
+
 export default function App() {
+  const isAndroidTauri = typeof navigator !== 'undefined'
+    && /Android/i.test(navigator.userAgent)
+    && isTauri();
+  return isAndroidTauri ? <MobileShell /> : <DesktopApp />;
+}
+
+function DesktopApp() {
   const [setupDone, setSetupDone] = useState(!isTauri());
   const handleSetupReady = useCallback(() => {
     setSetupDone(true);
