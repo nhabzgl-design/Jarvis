@@ -15,5 +15,10 @@
         "transparent": false
       }
     ]
+  },
+  "bundle": {
+    "android": {
+      "minSdkVersion": 24
+    }
   }
 }
