@@ -9,8 +9,8 @@ npm ci
 # Generate the native Gradle project once. The generated project is kept under
 # src-tauri/gen/android; this command is safe to rerun on an existing project.
 if [ ! -d "src-tauri/gen/android" ]; then
-  npx tauri android init --ci --config src-tauri/tauri.android.conf.json
+  npx tauri android init --ci
 fi
 
 npm run build:tauri
-npx tauri android build --ci --apk --target aarch64 --config src-tauri/tauri.android.conf.json
+npx tauri android build --ci --apk --target aarch64
