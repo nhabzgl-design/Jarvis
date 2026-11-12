@@ -67,4 +67,4 @@ The reported 8 GB physical RAM plus 8 GB extended/virtual RAM is not 16 GB of ph
 
 ## Current status
 
-Planning and source inspection are complete. No Android source implementation or APK has been produced yet. The first code milestone is to generate the Tauri Android project and isolate the desktop Rust entry point from the Android target.
+Planning and source inspection are complete. The first code milestone is committed: the existing desktop Rust runtime is isolated in `desktop.rs`, Android now has a separate minimal Tauri entry point in `mobile.rs`, desktop-only Cargo dependencies are excluded from Android, and an Android config preserves the ZERO app ID. The generated Gradle project, mobile-specific UI, local inference runtime, native voice, and APK build/test are still outstanding.
