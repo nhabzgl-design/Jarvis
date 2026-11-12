@@ -1,0 +1,94 @@
+name: Build ZERO Android APK
+
+on:
+  push:
+    branches:
+      - android-mobile-port
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/zero-android-apk.yml'
+      - 'frontend/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zero-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    name: Build arm64 APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout ZERO
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+
+      - name: Pin npm version
+        run: npm install --global npm@11.19.0
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android SDK and NDK packages
+        run: |
+          sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36.0.0" "cmake;3.31.6" "ndk;29.0.13113456"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/29.0.13113456" >> "$GITHUB_ENV"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Build ZERO APK
+        working-directory: frontend
+        run: npm run android:build
+
+      # Temporary test signing makes the APK installable for device testing.
+      # This per-run key is intentionally not a production/update signing key.
+      - name: Sign test APK
+        id: sign
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find frontend/src-tauri/gen/android -type f -name '*.apk' -path '*/build/outputs/*' | head -n 1)"
+          test -n "$APK"
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/36.0.0"
+          "$BUILD_TOOLS/zipalign" -f -p 4 "$APK" "$RUNNER_TEMP/ZERO-aligned.apk"
+          keytool -genkeypair -noprompt -v \
+            -keystore "$RUNNER_TEMP/zero-test.keystore" \
+            -storepass "zero-test-only" -keypass "zero-test-only" \
+            -alias zero-test -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=ZERO Test, OU=Android, O=ZERO, L=Manila, S=Metro Manila, C=PH"
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks "$RUNNER_TEMP/zero-test.keystore" \
+            --ks-pass pass:zero-test-only --key-pass pass:zero-test-only \
+            --out "$RUNNER_TEMP/ZERO-Android-arm64-TEST-SIGNED.apk" \
+            "$RUNNER_TEMP/ZERO-aligned.apk"
+          "$BUILD_TOOLS/apksigner" verify --verbose "$RUNNER_TEMP/ZERO-Android-arm64-TEST-SIGNED.apk"
+          echo "apk_path=$RUNNER_TEMP/ZERO-Android-arm64-TEST-SIGNED.apk" >> "$GITHUB_OUTPUT"
+
+      - name: Upload installable test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZERO-Android-arm64-TEST-SIGNED
+          path: ${{ steps.sign.outputs.apk_path }}
+          if-no-files-found: error
+          retention-days: 14

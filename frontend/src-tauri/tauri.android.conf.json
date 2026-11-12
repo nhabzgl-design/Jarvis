@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ZERO",
+  "version": "1.0.1",
+  "identifier": "com.zero.assistant",
+  "app": {
+    "windows": [
+      {
+        "title": "ZERO",
+        "width": 420,
+        "height": 840,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": false,
+        "transparent": false
+      }
+    ]
+  },
+  "bundle": {
+    "android": {
+      "minSdkVersion": 24
+    }
+  }
+}

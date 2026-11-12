@@ -14,7 +14,9 @@
     "build:tauri": "tsc -b && vite build --outDir dist",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test": "vitest run"
+    "test": "vitest run",
+    "android:init": "tauri android init --ci",
+    "android:build": "bash scripts/build-android-apk.sh"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
