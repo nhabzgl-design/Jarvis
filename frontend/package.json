@@ -15,8 +15,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run",
-    "android:init": "tauri android init --ci --config src-tauri/tauri.android.conf.json",
-    "android:build": "tauri android build --ci --apk --target aarch64 --config src-tauri/tauri.android.conf.json"
+    "android:init": "tauri android init --ci",
+    "android:build": "tauri android build --ci --apk --target aarch64"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
