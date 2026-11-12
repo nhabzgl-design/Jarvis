@@ -20,7 +20,6 @@ if [ ! -d "src-tauri/gen/android" ]; then npx tauri android init --ci; fi
 [ -x src-tauri/gen/android/gradlew ] || fail "Tauri Android init did not produce the Gradle wrapper."
 npm run build:tauri
 npx tauri android build --ci --apk --target aarch64
-mapfile -t APKS < <(find src-tauri/gen/android -type f -name '*.apk' -path '*/build/outputs/*' -print)
-[ "\${#APKS[@]}" -gt 0 ] || fail "Build completed but no APK was found under src-tauri/gen/android/**/build/outputs/."
-printf '\nAPK artifact(s):\n'
-printf '  %s\n' "\${APKS[@]}"
+APKS="$(find src-tauri/gen/android -type f -name '*.apk' -path '*/build/outputs/*' -print)"
+[ -n "$APKS" ] || fail "Build completed but no APK was found under src-tauri/gen/android/**/build/outputs/."
+printf '\nAPK artifact(s):\n%s\n' "$APKS"
