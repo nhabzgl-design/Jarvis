@@ -18,6 +18,73 @@ printf 'Toolchain preflight passed. Node %s; npm %s.\n' "$(node --version)" "$(n
 npm ci
 if [ ! -d "src-tauri/gen/android" ]; then npx tauri android init --ci; fi
 [ -x src-tauri/gen/android/gradlew ] || fail "Tauri Android init did not produce the Gradle wrapper."
+
+# Build the pinned upstream llama.cpp Android inference library as an app module.
+# Keep the repository at this exact path: its CMakeLists resolves the llama.cpp
+# root by walking six parent directories from examples/llama.android/lib/src/main/cpp.
+LLAMA_REF="e0949d09b130707b3fa93d2cff616024231cf939"
+LLAMA_DIR="src-tauri/gen/android/llama.cpp"
+if [ ! -d "$LLAMA_DIR/.git" ]; then
+  git clone --filter=blob:none --no-checkout https://github.com/ggml-org/llama.cpp.git "$LLAMA_DIR"
+fi
+git -C "$LLAMA_DIR" fetch --depth 1 origin "$LLAMA_REF"
+git -C "$LLAMA_DIR" checkout --detach "$LLAMA_REF"
+
+python3 - <<'PY'
+from pathlib import Path
+import re
+
+root = Path("src-tauri/gen/android")
+settings = root / "settings.gradle.kts"
+app_gradle = root / "app" / "build.gradle.kts"
+lib_gradle = root / "llama.cpp" / "examples" / "llama.android" / "lib" / "build.gradle.kts"
+
+for p in (settings, app_gradle, lib_gradle):
+    if not p.is_file():
+        raise SystemExit(f"Required Android Gradle file missing: {p}")
+
+s = settings.read_text()
+include_line = 'include(":llama-lib")'
+project_line = 'project(":llama-lib").projectDir = file("llama.cpp/examples/llama.android/lib")'
+if include_line not in s:
+    s += f"\n// ZERO local GGUF inference engine (pinned llama.cpp Android sample).\n{include_line}\n{project_line}\n"
+    settings.write_text(s)
+
+lib = lib_gradle.read_text()
+lib = lib.replace(
+    'plugins {\n    alias(libs.plugins.android.library)\n    alias(libs.plugins.jetbrains.kotlin.android)\n}',
+    'plugins {\n    id("com.android.library")\n    id("org.jetbrains.kotlin.android")\n}'
+)
+lib = lib.replace('implementation(libs.androidx.core.ktx)', 'implementation("androidx.core:core-ktx:1.16.0")')
+lib = lib.replace('implementation(libs.androidx.datastore.preferences)', 'implementation("androidx.datastore:datastore-preferences:1.1.7")')
+lib = re.sub(r'\n\s*testImplementation\(libs\.junit\)', '', lib)
+lib = re.sub(r'\n\s*androidTestImplementation\(libs\.androidx\.junit\)', '', lib)
+if 'libs.plugins.' in lib or 'libs.androidx.' in lib:
+    raise SystemExit("Unresolved sample version-catalog alias remains in llama-lib/build.gradle.kts")
+lib_gradle.write_text(lib)
+
+app = app_gradle.read_text()
+if 'implementation(project(":llama-lib"))' not in app:
+    match = re.search(r'(?m)^dependencies\s*\{', app)
+    if not match:
+        raise SystemExit("Could not locate app dependencies block")
+    start = match.end()
+    depth = 1
+    i = start
+    while i < len(app) and depth:
+        if app[i] == "{":
+            depth += 1
+        elif app[i] == "}":
+            depth -= 1
+        i += 1
+    if depth:
+        raise SystemExit("Unbalanced app dependencies block")
+    app = app[:i-1] + '\n    implementation(project(":llama-lib"))\n' + app[i-1:]
+    app_gradle.write_text(app)
+print("Pinned llama.cpp Android library wired into the ZERO APK Gradle build.")
+PY
+
+
 npm run build:tauri
 npx tauri android build --ci --apk --target aarch64
 APKS="$(find src-tauri/gen/android -type f -name '*.apk' -path '*/build/outputs/*' -print)"
