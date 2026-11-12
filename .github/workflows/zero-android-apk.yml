@@ -61,10 +61,34 @@ jobs:
         working-directory: frontend
         run: npm run android:build
 
-      - name: Upload APK artifact
+      # Temporary test signing makes the APK installable for device testing.
+      # This per-run key is intentionally not a production/update signing key.
+      - name: Sign test APK
+        id: sign
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find frontend/src-tauri/gen/android -type f -name '*.apk' -path '*/build/outputs/*' | head -n 1)"
+          test -n "$APK"
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          "$BUILD_TOOLS/zipalign" -f -p 4 "$APK" "$RUNNER_TEMP/ZERO-aligned.apk"
+          keytool -genkeypair -noprompt -v \
+            -keystore "$RUNNER_TEMP/zero-test.keystore" \
+            -storepass "zero-test-only" -keypass "zero-test-only" \
+            -alias zero-test -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=ZERO Test, OU=Android, O=ZERO, L=Manila, S=Metro Manila, C=PH"
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks "$RUNNER_TEMP/zero-test.keystore" \
+            --ks-pass pass:zero-test-only --key-pass pass:zero-test-only \
+            --out "$RUNNER_TEMP/ZERO-Android-arm64-TEST-SIGNED.apk" \
+            "$RUNNER_TEMP/ZERO-aligned.apk"
+          "$BUILD_TOOLS/apksigner" verify --verbose "$RUNNER_TEMP/ZERO-Android-arm64-TEST-SIGNED.apk"
+          echo "apk_path=$RUNNER_TEMP/ZERO-Android-arm64-TEST-SIGNED.apk" >> "$GITHUB_OUTPUT"
+
+      - name: Upload installable test APK
         uses: actions/upload-artifact@v4
         with:
-          name: ZERO-Android-arm64-APK
-          path: frontend/src-tauri/gen/android/**/build/outputs/**/*.apk
+          name: ZERO-Android-arm64-TEST-SIGNED
+          path: ${{ steps.sign.outputs.apk_path }}
           if-no-files-found: error
           retention-days: 14
