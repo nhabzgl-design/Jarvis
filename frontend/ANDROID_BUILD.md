@@ -9,17 +9,19 @@ The Android target uses the isolated mobile Rust entry point and the Android-spe
 
 ## Build prerequisites
 
-Install Node.js 22.22+, npm 11.19+, JDK 17+, Rust with the `aarch64-linux-android` target, Android SDK/platform tools, and Android NDK. Set `ANDROID_HOME` (or `ANDROID_SDK_ROOT`) and `NDK_HOME`. The build script checks these prerequisites before running `npm ci`.
+Install Node.js 22.22+, npm 11.19+ (below 12), JDK 17+, Rust with the `aarch64-linux-android` target, Android SDK/platform tools, and Android NDK. Set `ANDROID_HOME` (or `ANDROID_SDK_ROOT`) and `NDK_HOME`.
 
-## Generate Android project
+From `frontend/`, the build script validates these requirements and checks for `package-lock.json` before it runs `npm ci`. It then generates the Android Gradle project if it is missing, builds the web assets, invokes the Tauri Android APK build for arm64, and searches for the actual APK output.
 
-From `frontend/`, run:
+## Generate Android project manually (optional)
+
+The normal `npm run android:build` command automatically runs Android project initialization when `src-tauri/gen/android` is missing. If you want to generate it separately, run this from `frontend/`:
 
 ```sh
-npx tauri android init --config src-tauri/tauri.android.conf.json
+npm run android:init
 ```
 
-This generates the Gradle Android project under `src-tauri/gen/android`. Review and commit the generated project before relying on CI.
+This maps to `tauri android init --ci` and uses Tauri's automatically merged `tauri.android.conf.json` configuration. The generated Gradle project is placed under `src-tauri/gen/android`.
 
 ## Build APK
 
@@ -29,7 +31,7 @@ From `frontend/`, run:
 npm run android:build
 ```
 
-The Tauri Android build output is expected under the generated Android project's Gradle build output. Inspect the actual output path from the build log rather than assuming a release artifact exists.
+The script prints the APK path only if it finds an APK under the generated Android project's Gradle `build/outputs` directories. A successful script syntax check is not an Android build; the actual SDK/NDK build and device installation still need to be performed.
 
 ## Important current limitation
 
