@@ -34,18 +34,29 @@ python3 - <<'PY'
 from pathlib import Path
 import re
 
-root = Path("src-tauri/gen/android")
-settings = root / "settings.gradle.kts"
-app_gradle = root / "app" / "build.gradle.kts"
-lib_gradle = root / "llama.cpp" / "examples" / "llama.android" / "lib" / "build.gradle.kts"
+android_root = Path("src-tauri/gen/android")
+settings_candidates = sorted(
+    [*android_root.rglob("settings.gradle.kts")],
+    key=lambda p: (len(p.parts), str(p))
+)
+app_candidates = sorted(
+    [*android_root.rglob("app/build.gradle.kts")],
+    key=lambda p: (len(p.parts), str(p))
+)
+if not settings_candidates:
+    raise SystemExit(f"No settings.gradle.kts found under {android_root}")
+if not app_candidates:
+    raise SystemExit(f"No app/build.gradle.kts found under {android_root}")
+settings = settings_candidates[0]
+app_gradle = app_candidates[0]
+lib_gradle = android_root / "llama.cpp" / "examples" / "llama.android" / "lib" / "build.gradle.kts"
+settings_dir = settings.parent
+llama_project_dir = (android_root / "llama.cpp" / "examples" / "llama.android" / "lib").relative_to(settings_dir)
 
-for p in (settings, app_gradle, lib_gradle):
-    if not p.is_file():
-        raise SystemExit(f"Required Android Gradle file missing: {p}")
 
 s = settings.read_text()
 include_line = 'include(":llama-lib")'
-project_line = 'project(":llama-lib").projectDir = file("llama.cpp/examples/llama.android/lib")'
+project_line = f'project(":llama-lib").projectDir = file("{llama_project_dir.as_posix()}")'
 if include_line not in s:
     s += f"\n// ZERO local GGUF inference engine (pinned llama.cpp Android sample).\n{include_line}\n{project_line}\n"
     settings.write_text(s)
