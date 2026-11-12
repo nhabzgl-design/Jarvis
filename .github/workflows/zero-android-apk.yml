@@ -49,8 +49,8 @@ jobs:
 
       - name: Install Android SDK and NDK packages
         run: |
-          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
-          echo "NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36.0.0" "cmake;3.31.6" "ndk;29.0.13113456"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/29.0.13113456" >> "$GITHUB_ENV"
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -70,7 +70,7 @@ jobs:
           set -euo pipefail
           APK="$(find frontend/src-tauri/gen/android -type f -name '*.apk' -path '*/build/outputs/*' | head -n 1)"
           test -n "$APK"
-          BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/36.0.0"
           "$BUILD_TOOLS/zipalign" -f -p 4 "$APK" "$RUNNER_TEMP/ZERO-aligned.apk"
           keytool -genkeypair -noprompt -v \
             -keystore "$RUNNER_TEMP/zero-test.keystore" \
