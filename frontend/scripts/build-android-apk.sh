@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Run from the frontend/ directory on a machine with Android Studio,
-# Android SDK/NDK, JDK 17+, Rust Android targets, and Node/npm installed.
+# Run from frontend/ on a Linux or macOS build host with:
+# Node/npm matching package.json, Rust + aarch64-linux-android target,
+# JDK 17+, Android SDK, Android NDK, and Android command-line tools.
 npm ci
+
+# Generate the native Gradle project once. The generated project is kept under
+# src-tauri/gen/android; this command is safe to rerun on an existing project.
+if [ ! -d "src-tauri/gen/android" ]; then
+  npx tauri android init --ci --config src-tauri/tauri.android.conf.json
+fi
+
 npm run build:tauri
-npx tauri android build --apk --config src-tauri/tauri.android.conf.json
+npx tauri android build --ci --apk --target aarch64 --config src-tauri/tauri.android.conf.json
